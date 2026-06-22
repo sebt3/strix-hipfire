@@ -100,7 +100,6 @@ RUN cat > /root/.hipfire/config.json << 'EOF'
   "temperature": 0.6,
   "top_p": 0.95,
   "max_tokens": 8192,
-  "max_seq": 262144,
   "gpu_arch": "gfx1151",
   "host": "0.0.0.0",
   "port": 8080
