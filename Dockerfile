@@ -73,6 +73,7 @@ COPY --from=rocm-libs /opt/rocm/bin/hipcc                           /opt/rocm/bi
 COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/clang-22              /opt/rocm/lib/llvm/bin/
 COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/lld                   /opt/rocm/lib/llvm/bin/
 COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/clang-offload-bundler /opt/rocm/lib/llvm/bin/
+COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/llvm-objcopy          /opt/rocm/lib/llvm/bin/
 RUN ln -sf clang-22 /opt/rocm/lib/llvm/bin/clang \
  && ln -sf clang    /opt/rocm/lib/llvm/bin/clang++ \
  && ln -sf /opt/rocm/bin/hipcc /usr/local/bin/hipcc
@@ -131,7 +132,7 @@ RUN cat > /root/.hipfire/config.json << 'EOF'
 }
 EOF
 
-ENV PATH="/root/.hipfire/bin:/usr/local/bin:$PATH"
+ENV PATH="/root/.hipfire/bin:/usr/local/bin:/opt/rocm/lib/llvm/bin:$PATH"
 WORKDIR /root/.hipfire
 
 RUN printf '#!/bin/bash\nset -e\nln -sf /proc/1/fd/1 /root/.hipfire/serve.log\nexec hipfire serve "$@"\n' \
