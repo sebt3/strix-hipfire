@@ -11,20 +11,9 @@ RUN apt-get update \
  && amdgpu-install -y --usecase=rocm --no-dkms \
  && apt-get clean && rm -rf /var/lib/apt/lists/* amdgpu-install_7.2.70200-1_all.deb
 
-# libhsakmt may land outside /opt/rocm on Ubuntu Noble
+# libhsakmt may land outside /opt/rocm on Ubuntu Noble — bring it in
 RUN find /usr/lib -name 'libhsakmt.so*' -type f \
     | xargs -r -I{} cp {} /opt/rocm/lib/
-
-# Strip compiler/SDK — keep only runtime .so files
-# llvm (~10GB) and amdgcn (~3GB) are the large ones
-RUN rm -rf /opt/rocm/llvm \
-           /opt/rocm/amdgcn \
-           /opt/rocm/include \
-           /opt/rocm/share \
-           /opt/rocm/bin \
-           /opt/rocm/lib/cmake \
-           /opt/rocm/lib/pkgconfig \
- && find /opt/rocm/lib -maxdepth 1 -name '*.a' -delete
 
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
 FROM docker.io/library/debian:${DEB_TAG} AS builder
@@ -59,17 +48,23 @@ FROM docker.io/library/debian:${DEB_TAG} AS runtime
 # Debian runtime deps (non-ROCm)
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    ca-certificates libdrm-amdgpu1 libdrm2 libnuma1 libelf1 zlib1g \
+    ca-certificates libdrm-amdgpu1 libdrm2 libnuma1 libelf1 zlib1g libzstd1 libstdc++6 \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ROCm 7.2 HIP runtime from rocm-libs stage
-COPY --from=rocm-libs /opt/rocm/lib/ /opt/rocm/lib/
-# Register in conf.d so ldconfig finds it even after postinst reruns
+# ROCm 7.2 HIP runtime — only the 6 libraries hipfire actually loads at runtime.
+# (verified via /proc/<pid>/maps on a live gfx1151 container)
+RUN mkdir -p /opt/rocm/lib
+COPY --from=rocm-libs /opt/rocm/lib/libamdhip64.so*             /opt/rocm/lib/
+COPY --from=rocm-libs /opt/rocm/lib/libhsa-runtime64.so*        /opt/rocm/lib/
+COPY --from=rocm-libs /opt/rocm/lib/libamd_comgr.so*            /opt/rocm/lib/
+COPY --from=rocm-libs /opt/rocm/lib/libhsakmt.so*               /opt/rocm/lib/
+COPY --from=rocm-libs /opt/rocm/lib/librocprofiler-register.so* /opt/rocm/lib/
+COPY --from=rocm-libs /opt/rocm/lib/libhsa-amd-aqlprofile64.so* /opt/rocm/lib/
 RUN echo /opt/rocm/lib > /etc/ld.so.conf.d/rocm.conf \
  && ldconfig \
  && ln -sf libamdhip64.so.7      /opt/rocm/lib/libamdhip64.so \
  && ln -sf libhsa-runtime64.so.1 /opt/rocm/lib/libhsa-runtime64.so \
- && ln -sf libamd_comgr.so.2     /opt/rocm/lib/libamd_comgr.so
+ && ln -sf libamd_comgr.so.3     /opt/rocm/lib/libamd_comgr.so
 
 # Stub hipcc: hipfire MMQ screening panics on ENOENT but handles exit!=0
 # gracefully ("assuming unsafe") — stub avoids the unwrap() panic
