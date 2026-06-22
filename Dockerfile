@@ -1,7 +1,6 @@
 ARG DEB_TAG=trixie-slim
 
-# ─── Stage 0: ROCm 7.2 HIP runtime (Ubuntu Noble, hiplibsonly) ───────────────
-# hiplibsonly = hip-runtime-amd + hsa-rocr + hsakmt + comgr — no SDK/compilers
+# ─── Stage 0: ROCm 7.2 HIP runtime (Ubuntu Noble) ────────────────────────────
 FROM ubuntu:noble AS rocm-libs
 
 RUN apt-get update \
@@ -9,12 +8,23 @@ RUN apt-get update \
     wget ca-certificates \
  && wget -q https://repo.radeon.com/amdgpu-install/7.2/ubuntu/noble/amdgpu-install_7.2.70200-1_all.deb \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y ./amdgpu-install_7.2.70200-1_all.deb \
- && amdgpu-install -y --usecase=hiplibsonly --no-dkms \
+ && amdgpu-install -y --usecase=rocm --no-dkms \
  && apt-get clean && rm -rf /var/lib/apt/lists/* amdgpu-install_7.2.70200-1_all.deb
 
 # libhsakmt may land outside /opt/rocm on Ubuntu Noble
 RUN find /usr/lib -name 'libhsakmt.so*' -type f \
     | xargs -r -I{} cp {} /opt/rocm/lib/
+
+# Strip compiler/SDK — keep only runtime .so files
+# llvm (~10GB) and amdgcn (~3GB) are the large ones
+RUN rm -rf /opt/rocm/llvm \
+           /opt/rocm/amdgcn \
+           /opt/rocm/include \
+           /opt/rocm/share \
+           /opt/rocm/bin \
+           /opt/rocm/lib/cmake \
+           /opt/rocm/lib/pkgconfig \
+ && find /opt/rocm/lib -maxdepth 1 -name '*.a' -delete
 
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
 FROM docker.io/library/debian:${DEB_TAG} AS builder
