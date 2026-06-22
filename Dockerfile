@@ -11,26 +11,9 @@ RUN apt-get update \
  && amdgpu-install -y --usecase=rocm --no-dkms \
  && apt-get clean && rm -rf /var/lib/apt/lists/* amdgpu-install_7.2.70200-1_all.deb
 
-# Bundle ROCm runtime libs needed by hipfire:
-#  - statically-linked deps (via ldd, /opt/rocm only)
-#  - libhsakmt (may live outside /opt/rocm on Ubuntu Noble)
-#  - dlopen'd HSA plugins: libhsa-amd-aqlprofile64 + hsa/ extensions
-RUN mkdir -p /rocm-bundle/lib/hsa \
- && for lib in \
-      /opt/rocm/lib/libamdhip64.so.7 \
-      /opt/rocm/lib/libhsa-runtime64.so.1 \
-      /opt/rocm/lib/libamd_comgr.so.2; do \
-      cp "$lib" /rocm-bundle/lib/; \
-      ldd "$lib" 2>/dev/null \
-        | awk '/\/opt\/rocm/{print $3}' \
-        | xargs -r -I{} cp -n {} /rocm-bundle/lib/; \
-    done \
- && find /opt/rocm /usr/lib -name 'libhsakmt.so*' -type f \
-    | xargs -r -I{} cp -n {} /rocm-bundle/lib/ \
- && find /opt/rocm/lib -maxdepth 1 -name 'libhsa-amd-aqlprofile*.so*' -type f \
-    | xargs -r -I{} cp -n {} /rocm-bundle/lib/ \
- && cp -r /opt/rocm/lib/hsa/. /rocm-bundle/lib/hsa/ 2>/dev/null || true \
- && cp -r /opt/rocm/lib/rocprofiler-register/. /rocm-bundle/lib/rocprofiler-register/ 2>/dev/null || true
+# libhsakmt may live outside /opt/rocm on Ubuntu Noble — pull it in
+RUN find /usr/lib -name 'libhsakmt.so*' -type f \
+    | xargs -r -I{} cp {} /opt/rocm/lib/
 
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
 FROM docker.io/library/debian:${DEB_TAG} AS builder
@@ -43,7 +26,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ROCm 7.2 libs + headers for hip-bridge build
-COPY --from=rocm-libs /rocm-bundle/lib/ /opt/rocm/lib/
+COPY --from=rocm-libs /opt/rocm/lib/ /opt/rocm/lib/
 COPY --from=rocm-libs /opt/rocm/include/hip/ /opt/rocm/include/hip/
 RUN ldconfig /opt/rocm/lib
 
@@ -74,8 +57,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     ca-certificates libdrm-amdgpu1 libdrm2 libnuma1 libelf1 zlib1g \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ROCm 7.2 HIP runtime — extracted from rocm-libs stage
-COPY --from=rocm-libs /rocm-bundle/lib/ /opt/rocm/lib/
+# ROCm 7.2 full lib tree from rocm-libs stage
+COPY --from=rocm-libs /opt/rocm/lib/ /opt/rocm/lib/
 RUN ldconfig /opt/rocm/lib \
  && ln -sf libamdhip64.so.7      /opt/rocm/lib/libamdhip64.so \
  && ln -sf libhsa-runtime64.so.1 /opt/rocm/lib/libhsa-runtime64.so \
