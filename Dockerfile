@@ -92,8 +92,8 @@ RUN rm -rf /root/.hipfire/cli/node_modules \
            /root/.hipfire/cli/tsconfig.json \
            /root/.hipfire/cli/bun.lock
 
-# Pre-compiled gfx1151 kernels — hipfire looks at ~/.hipfire_kernels/{arch}/
-COPY kernels/gfx1151/ /root/.hipfire_kernels/gfx1151/
+# Pre-compiled gfx1151 kernels — daemon looks in <exe_dir>/kernels/compiled/<arch>/
+COPY kernels/gfx1151/ /root/.hipfire/bin/kernels/compiled/gfx1151/
 
 RUN printf '#!/bin/bash\nset -e\nexec bun run "$HOME/.hipfire/cli/index.ts" "$@"\n' \
     > /root/.hipfire/bin/hipfire \
