@@ -1,6 +1,7 @@
 ARG DEB_TAG=trixie-slim
 
-# ─── Stage 0: ROCm 7.2 via amdgpu-install (Ubuntu Noble) ────────────────────
+# ─── Stage 0: ROCm 7.2 HIP runtime (Ubuntu Noble, hiplibsonly) ───────────────
+# hiplibsonly = hip-runtime-amd + hsa-rocr + hsakmt + comgr — no SDK/compilers
 FROM ubuntu:noble AS rocm-libs
 
 RUN apt-get update \
@@ -8,10 +9,10 @@ RUN apt-get update \
     wget ca-certificates \
  && wget -q https://repo.radeon.com/amdgpu-install/7.2/ubuntu/noble/amdgpu-install_7.2.70200-1_all.deb \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y ./amdgpu-install_7.2.70200-1_all.deb \
- && amdgpu-install -y --usecase=rocm --no-dkms \
+ && amdgpu-install -y --usecase=hiplibsonly --no-dkms \
  && apt-get clean && rm -rf /var/lib/apt/lists/* amdgpu-install_7.2.70200-1_all.deb
 
-# libhsakmt may live outside /opt/rocm on Ubuntu Noble — pull it in
+# libhsakmt may land outside /opt/rocm on Ubuntu Noble
 RUN find /usr/lib -name 'libhsakmt.so*' -type f \
     | xargs -r -I{} cp {} /opt/rocm/lib/
 
@@ -22,13 +23,7 @@ ARG HIPFIRE_BRANCH=master
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates curl git gcc build-essential pkg-config libssl-dev unzip \
-    libdrm-amdgpu1 libdrm2 libnuma1 libelf1 zlib1g \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# ROCm 7.2 libs + headers for hip-bridge build
-COPY --from=rocm-libs /opt/rocm/lib/ /opt/rocm/lib/
-COPY --from=rocm-libs /opt/rocm/include/hip/ /opt/rocm/include/hip/
-RUN ldconfig /opt/rocm/lib
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:$PATH"
@@ -57,12 +52,19 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update \
     ca-certificates libdrm-amdgpu1 libdrm2 libnuma1 libelf1 zlib1g \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# ROCm 7.2 full lib tree from rocm-libs stage
+# ROCm 7.2 HIP runtime from rocm-libs stage
 COPY --from=rocm-libs /opt/rocm/lib/ /opt/rocm/lib/
-RUN ldconfig /opt/rocm/lib \
+# Register in conf.d so ldconfig finds it even after postinst reruns
+RUN echo /opt/rocm/lib > /etc/ld.so.conf.d/rocm.conf \
+ && ldconfig \
  && ln -sf libamdhip64.so.7      /opt/rocm/lib/libamdhip64.so \
  && ln -sf libhsa-runtime64.so.1 /opt/rocm/lib/libhsa-runtime64.so \
  && ln -sf libamd_comgr.so.2     /opt/rocm/lib/libamd_comgr.so
+
+# Stub hipcc: hipfire MMQ screening panics on ENOENT but handles exit!=0
+# gracefully ("assuming unsafe") — stub avoids the unwrap() panic
+RUN printf '#!/bin/sh\nexit 1\n' > /usr/local/bin/hipcc \
+ && chmod +x /usr/local/bin/hipcc
 
 # Bun binary (single static binary, no install needed)
 COPY --from=builder /root/.bun/bin/bun /usr/local/bin/bun
