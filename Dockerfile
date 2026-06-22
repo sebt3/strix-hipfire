@@ -66,10 +66,16 @@ RUN echo /opt/rocm/lib > /etc/ld.so.conf.d/rocm.conf \
  && ln -sf libhsa-runtime64.so.1 /opt/rocm/lib/libhsa-runtime64.so \
  && ln -sf libamd_comgr.so.3     /opt/rocm/lib/libamd_comgr.so
 
-# Stub hipcc: hipfire MMQ screening panics on ENOENT but handles exit!=0
-# gracefully ("assuming unsafe") — stub avoids the unwrap() panic
-RUN printf '#!/bin/sh\nexit 1\n' > /usr/local/bin/hipcc \
- && chmod +x /usr/local/bin/hipcc
+# hipcc toolchain — clang-22 is statically linked (172MB), no extra LLVM .so needed
+RUN mkdir -p /opt/rocm/bin /opt/rocm/lib/llvm/bin /opt/rocm/amdgcn /opt/rocm/include
+COPY --from=rocm-libs /opt/rocm/bin/hipcc             /opt/rocm/bin/
+COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/clang-22 /opt/rocm/lib/llvm/bin/
+RUN ln -sf clang-22 /opt/rocm/lib/llvm/bin/clang \
+ && ln -sf clang    /opt/rocm/lib/llvm/bin/clang++ \
+ && ln -sf /opt/rocm/bin/hipcc /usr/local/bin/hipcc
+COPY --from=rocm-libs /opt/rocm/amdgcn/bitcode/ /opt/rocm/amdgcn/bitcode/
+COPY --from=rocm-libs /opt/rocm/include/hip/    /opt/rocm/include/hip/
+ENV HIP_PATH=/opt/rocm
 
 # Bun binary (single static binary, no install needed)
 COPY --from=builder /root/.bun/bin/bun /usr/local/bin/bun
