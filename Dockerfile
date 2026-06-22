@@ -22,7 +22,9 @@ RUN mkdir -p /rocm-bundle \
       ldd "$lib" 2>/dev/null \
         | awk '/\/opt\/rocm/{print $3}' \
         | xargs -r -I{} cp {} /rocm-bundle/; \
-    done
+    done \
+ && find /opt/rocm /usr/lib -name 'libhsakmt.so*' -type f \
+    | xargs -r -I{} cp {} /rocm-bundle/
 
 # ─── Stage 1: Builder ────────────────────────────────────────────────────────
 FROM docker.io/library/debian:${DEB_TAG} AS builder
