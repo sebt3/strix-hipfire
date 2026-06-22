@@ -49,6 +49,7 @@ FROM docker.io/library/debian:${DEB_TAG} AS runtime
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates libdrm-amdgpu1 libdrm2 libnuma1 libelf1 zlib1g libzstd1 libstdc++6 \
+    libc6-dev \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ROCm 7.2 HIP runtime — only the 6 libraries hipfire actually loads at runtime.
