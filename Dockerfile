@@ -5,7 +5,7 @@ FROM ubuntu:noble AS rocm-libs
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    wget ca-certificates \
+    wget ca-certificates g++-14 \
  && wget -q https://repo.radeon.com/amdgpu-install/7.2/ubuntu/noble/amdgpu-install_7.2.70200-1_all.deb \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y ./amdgpu-install_7.2.70200-1_all.deb \
  && amdgpu-install -y --usecase=rocm --no-dkms \
@@ -75,6 +75,22 @@ RUN ln -sf clang-22 /opt/rocm/lib/llvm/bin/clang \
  && ln -sf /opt/rocm/bin/hipcc /usr/local/bin/hipcc
 COPY --from=rocm-libs /opt/rocm/amdgcn/bitcode/ /opt/rocm/amdgcn/bitcode/
 COPY --from=rocm-libs /opt/rocm/include/hip/    /opt/rocm/include/hip/
+
+# Clang resource dir: built-in headers + bitcode symlink for kernel compilation
+COPY --from=rocm-libs /opt/rocm/lib/llvm/lib/clang/22/include/ /opt/rocm/lib/llvm/lib/clang/22/include/
+RUN mkdir -p /opt/rocm/lib/llvm/lib/clang/22/lib/amdgcn \
+ && ln -s /opt/rocm/amdgcn/bitcode /opt/rocm/lib/llvm/lib/clang/22/lib/amdgcn/bitcode
+
+# C++ standard library headers (GCC 14) — required by hip_runtime.h via <cstdint>
+COPY --from=rocm-libs /usr/include/c++/14/                     /usr/include/c++/14/
+COPY --from=rocm-libs /usr/include/x86_64-linux-gnu/c++/14/    /usr/include/x86_64-linux-gnu/c++/14/
+# GCC 14 installation dir — clang uses crtbegin.o to detect the GCC installation
+COPY --from=rocm-libs /usr/lib/gcc/x86_64-linux-gnu/14/include/ /usr/lib/gcc/x86_64-linux-gnu/14/include/
+COPY --from=rocm-libs /usr/lib/gcc/x86_64-linux-gnu/14/crtbegin.o /usr/lib/gcc/x86_64-linux-gnu/14/
+
+# hipcc version file (suppresses startup warning)
+COPY --from=rocm-libs /opt/rocm/share/hip/ /opt/rocm/share/hip/
+
 ENV HIP_PATH=/opt/rocm
 
 # Bun binary (single static binary, no install needed)
