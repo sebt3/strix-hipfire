@@ -49,7 +49,7 @@ FROM docker.io/library/debian:${DEB_TAG} AS runtime
 RUN DEBIAN_FRONTEND=noninteractive apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates libdrm-amdgpu1 libdrm2 libnuma1 libelf1 zlib1g libzstd1 libstdc++6 \
-    libc6-dev \
+    libc6-dev libxml2 liblzma5 \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ROCm 7.2 HIP runtime — only the 6 libraries hipfire actually loads at runtime.
@@ -69,8 +69,10 @@ RUN echo /opt/rocm/lib > /etc/ld.so.conf.d/rocm.conf \
 
 # hipcc toolchain — clang-22 is statically linked (172MB), no extra LLVM .so needed
 RUN mkdir -p /opt/rocm/bin /opt/rocm/lib/llvm/bin /opt/rocm/amdgcn /opt/rocm/include
-COPY --from=rocm-libs /opt/rocm/bin/hipcc             /opt/rocm/bin/
-COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/clang-22 /opt/rocm/lib/llvm/bin/
+COPY --from=rocm-libs /opt/rocm/bin/hipcc                           /opt/rocm/bin/
+COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/clang-22              /opt/rocm/lib/llvm/bin/
+COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/lld                   /opt/rocm/lib/llvm/bin/
+COPY --from=rocm-libs /opt/rocm/lib/llvm/bin/clang-offload-bundler /opt/rocm/lib/llvm/bin/
 RUN ln -sf clang-22 /opt/rocm/lib/llvm/bin/clang \
  && ln -sf clang    /opt/rocm/lib/llvm/bin/clang++ \
  && ln -sf /opt/rocm/bin/hipcc /usr/local/bin/hipcc
